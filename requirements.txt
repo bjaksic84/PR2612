@@ -1,0 +1,15 @@
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+mlxtend
+xgboost
+shap
+transformers
+datasets
+evaluate
+torch --index-url https://download.pytorch.org/whl/cpu
+jupyter
+joblib
+streamlit

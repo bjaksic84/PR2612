@@ -45,6 +45,34 @@ Med izbranimi značilkami so:
 | 4 | Gručenje (K-means), klasifikacija (logistična regresija, naključni gozdovi, XGBoost), primerjava modelov |
 | 5 | Razložljivost modela z metodo SHAP, sinteza ugotovitev |
 
+## Podrobnejši načrt za Fazo 0 in Fazo 1 (začetek dela)
+
+Za lažjo delitev dela in takojšen začetek projekta sta prvi fazi razdelani podrobneje. Tako imamo zagotovljeno enotno izhodišče za vse nadaljnje faze (NLP, Apriori, modeliranje).
+
+### Faza 0: Nalaganje podatkov in vzorčenje (Notebook `00_data_loading.ipynb`)
+- **Cilj**: Pripraviti obvladljivo in čisto začetno bazo iz izhodiščne ~1,2 GB datoteke.
+- **Koraki**:
+  1. **Branje podatkov** iz `data/raw/accepted_2007_to_2018Q4.csv` z uporabo `pandas` parametra `low_memory=False`.
+  2. **Filtriranje ciljne spremenljivke (`loan_status`)**: ohranimo samo vrstice *Fully Paid* (kodirano kot 0) in *Charged Off* (kodirano kot 1).
+  3. **Izbira atributov**: obdržimo ~40 ključnih stolpcev (npr. znesek, dti, dohodek, fico, emp_title, desc). Stolpec `addr_state` odstranimo (naša odločitev za manj dummy spremenljivk).
+  4. **Stratificirano vzorčenje**: izluščimo natanko natanko 20.000 vrstic. Obvezno mora ohranjati originalno razmerje med plačanimi in neplačanimi posojili.
+  5. **Razdelitev**: stratificirana delitev na učno (80 %) in testno (20 %) množico.
+- **Rezultat**: Datoteke `lending_club_20k.csv`, `train_raw.csv` in `test_raw.csv` shranjene v imeniku `data/`.
+
+### Faza 1: Raziskovalna analiza in predprocesiranje (Notebook `01_eda_preprocessing.ipynb`)
+- **Cilj**: Razumeti vzorec in pripraviti numerično bazo brez manjkajočih vrednosti, primerno za nevronske mreže in XGBoost.
+- **EDA (Eksploratorna analiza - preverjanje na vzorcu):**
+  1. Vizualizacije deleža manjkajočih podatkov in porazdelitev ciljne spremenljivke.
+  2. Histokrami ključnih numeričnih značilk (dohodek, dog, FICO...) s prekrivanjem barv glede na `loan_status` (razred).
+  3. Korelacijska matrika numeričnih značilk.
+  4. Analiza prisotnosti besedilnih preučevanih atributov (`desc`, `emp_title`).
+- **Predprocesiranje (Učenje oz. fit zgolj na *učni* množici, transformiranje pa na obeh):**
+  1. **Manjkajoči podatki**: Numerične z < 30 % manjkajočih imputiramo z mediano. Časovne atribute (`mths_since_last_delinq`) nadomestimo z mediano IN uvedemo binarno zastavico, če je bil podatek sprva manjkajoč. Besedilom dodelimo *prazno (\"\")* ali *"unknown"*.
+  2. **Inženiring značilk**: povprečen FICO rezultat `fico_avg`, dolžina kreditne zgodovine v letih (parsiranje `earliest_cr_line`), posojilo-na-dohodek, obrok-na-dohodek.
+  3. **Kodiranje**: razred in podrazred posojila ordinalno, kategorije vrste lastništva in namena v One-Hot.
+  4. **Skaliranje**: `StandardScaler` za vse numerične vrstice.
+- **Rezultat**: Pripravljeni in skalirani `train_processed.csv` in `test_processed.csv` podatki ter shranjeni scaler objekti v mapo `models/`.
+
 ## Pričakovani rezultati in prikaz
 
 Primarni rezultat projekta je napovedni model, ki za posamezno posojilo vrne **verjetnost neplačila** (vrednost med 0 in 1) skupaj z razvrstitvijo posojilojemalca v eno od skupin tveganja (nizko / srednje / visoko). Pričakujemo, da bo model XGBoost dosegel najboljšo ločljivost med razredi (AUC-ROC > 0,75), logistična regresija pa bo služila kot interpretabilna izhodišče za primerjavo.
