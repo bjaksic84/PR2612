@@ -44,10 +44,11 @@ Med izbranimi značilkami so:
 | 3 | NLP — analiza besedilnih polj s TF-IDF in demonstracija modela za analizo sentimenta (HuggingFace) |
 | 4 | Gručenje (K-means), klasifikacija (logistična regresija, naključni gozdovi, XGBoost), primerjava modelov |
 | 5 | Razložljivost modela z metodo SHAP, sinteza ugotovitev |
+| 6 | Primerjava in ovrednotenje rezultatov z obstoječo literaturo ter ugotovitvami sorodnih študij |
 
-## Podrobnejši načrt za Fazo 0 in Fazo 1 (začetek dela)
+## Podrobnejši načrt uvodnih faz
 
-Za lažjo delitev dela in takojšen začetek projekta sta prvi fazi razdelani podrobneje. Tako imamo zagotovljeno enotno izhodišče za vse nadaljnje faze (NLP, Apriori, modeliranje).
+Za lažjo delitev dela in takojšen začetek projekta so začetne faze razdelane podrobneje. Tako imamo zagotovljeno enotno izhodišče za vse nadaljnje faze (NLP, Apriori, modeliranje).
 
 ### Faza 0: Nalaganje podatkov in vzorčenje (Notebook `00_data_loading.ipynb`)
 - **Cilj**: Pripraviti obvladljivo in čisto začetno bazo iz izhodiščne ~1,2 GB datoteke.
@@ -72,6 +73,69 @@ Za lažjo delitev dela in takojšen začetek projekta sta prvi fazi razdelani po
   3. **Kodiranje**: razred in podrazred posojila ordinalno, kategorije vrste lastništva in namena v One-Hot.
   4. **Skaliranje**: `StandardScaler` za vse numerične vrstice.
 - **Rezultat**: Pripravljeni in skalirani `train_processed.csv` in `test_processed.csv` podatki ter shranjeni scaler objekti v mapo `models/`.
+
+### Faza 2: Iskanje asociacijskih pravil in izbira značilk (Notebook `02_pattern_mining.ipynb`)
+- **Cilj**: Odkriti skrite vzorce med dejavniki (Apriori) ter zmanjšati dimenzionalnost prostora (izbor najpomembnejših značilk).
+- **Asociacijska pravila (Association Rule Mining):**
+  1. **Diskretizacija**: Pretvorba zveznih spremenljivk (dohodek, višina posojila, DTI) v diskretne intervale (npr. 'nizek', 'srednji', 'visok') z uporabo binninga.
+  2. **Apriori algoritem**: Uporaba knjižnice `mlxtend` za iskanje pogostih naborov postavk (Frequent Itemsets).
+  3. **Izvleček pravil**: Pridobivanje asociacijskih pravil s poudarkom na tistih, ki za posledico (*consequent*) vsebujejo informacijo o neplačilu.
+  4. **Analiza:** Interpretacija metrik, kot so *podpora (support)*, *zaupanje (confidence)* in *dvig (lift)*.
+- **Izbira značilk (Feature Selection):**
+  1. Uporaba modelov (npr. naključni gozd za *feature importances*) na predprocesiranem naboru iz Faze 1.
+  2. Odstranitev odvečnih značilk za preprečevanje prevelikega prilagajanja (*overfitting*).
+- **Rezultat**: Optimiziran nabor pomembnih stolpcev za končno modeliranje (`train_selected.csv`, `test_selected.csv`).
+
+
+### Faza 3: NLP in analiza besedilnih polj (Notebook `03_nlp_risk_scoring.ipynb`)
+- **Cilj**: Iz besedilnih podatkov (`desc` in `emp_title`) pridobiti dodatne informativne značilke (signale o tveganju) za končno modeliranje.
+- **Obdelava s TF-IDF (`emp_title`)**:
+  1. Čiščenje besedila (pretvorba v male črke, odstranitev ločil in posebnosti).
+  2. Uporaba `TfidfVectorizer` (iz `scikit-learn`) za izluščitev najpomembnejših ključnih besed iz nazivov zaposlitev (npr. top 20-50 besed kot novih stolpcev).
+- **Analiza sentimenta s HuggingFace (`desc`)**:
+  1. Za daljša besedila (opise razlogov za posojilo) bomo izvedli analizo sentimenta z uporabo enega od vnaprej naučenih modelov (npr. `transformers` knjižnica, pipeline za sentiment).
+  2. Priključitev verjetnosti negativnega/pozitivnega sentimenta kot novo značilko (`desc_sentiment_score`).
+- **Združevanje**:
+  1. Pridobljene numerične in NLP značilke se priključijo k osnovni strukturi podatkov (`train_selected.csv` / `test_selected.csv`).
+  2. Prvotni tekstovni besedilni stolpci se odstranijo.
+- **Rezultat**: Podatkovni datoteki (`train_final.csv`, `test_final.csv`) z združenimi finančnimi in NLP značilkami, pripravljeni za končno modeliranje.
+
+### Faza 4: Gručenje in klasifikacijsko modeliranje (Notebook `04_modeling.ipynb`)
+- **Cilj**: Razviti končne modele za oceno tveganja neplačila in segmentirati stranke v skupine tveganja.
+- **Gručenje (K-Means)**:
+  1. Uporaba algoritma K-Means za nabor podatkov (`train_final.csv`), iskanje optimalnega števila gruč z metodo komolca (Elbow method).
+  2. Profiliranje posameznih gruč in ustvarjanje nove značilke `risk_cluster`.
+- **Klasifikacija**:
+  1. Začetna priprava osnovnega (baseline) modela: Logistična regresija.
+  2. Implementacija naprednejših modelov s prečnim preverjanjem (GridSearch/RandomSearch): Naključni gozd in XGBoost.
+  3. Reševanje neuravnoteženosti razredov (angl. *class imbalance*) z uporabo uteži (scale_pos_weight ipd.).
+- **Evalvacija**:
+  1. Modeli bodo ocenjeni na testni množici (`test_final.csv`).
+  2. Prikaz matrike zmede (confusion matrix) in izračun metrik, kot so točnost (Accuracy), natančnost (Precision), priklic (Recall), mera F1 ter AUC-ROC krivulja.
+- **Rezultat**: Optimalen model shranjen kot `xgb_model.pkl` za nadaljnje pojasnjevanje ob pomoči SHAP ter vnos v vizualno aplikacijo.
+
+### Faza 5: Razložljivost modela z metodo SHAP (Notebook `05_explainability.ipynb`)
+- **Cilj**: Omogočiti popolno transparentnost in razumljivost črne skrinjice znanja XGBoost modela preko globalnih in lokalnih SHAP vplivov.
+- **Globalna razložljivost**:
+  1. Uporaba `shap.TreeExplainer` na izbranem drevesnem modelu `xgb_model.pkl`.
+  2. Izračun in izris zbirnega grafa (`summary_plot`, `beeswarm`), ki nakazuje kateri atributi na ravni celotne populacije najbolj pripomorejo k povišanemu tveganju.
+- **Lokalna razložljivost (Individualne posojilne odločitve)**:
+  1. Identifikacija posameznika z zelo nizkim tveganjem za neplačilo (dober primer).
+  2. Identifikacija posameznika z zelo visokim tveganjem za neplačilo (slab primer).
+  3. Izris `waterfall_plot` za ta dva specifična primera z namenom razumevanja, zakaj sta uvrščena v ti kategoriji napovedi.
+- **Interaktivna aplikacija (Streamlit)**:
+  1. Priprava Python datoteke (`app.py`), ki zažene aplikacijo s pomočjo ogrodja Streamlit.
+  2. Aplikacija omogoča vnos poljubnih lastnosti posojilojemalca (ali naključen izbor vzorca iz predpripravljene CSV baze) in interaktivno napove tveganje, hkrati pa vmesniški prikaz izriše ustrezen SHAP graf (`waterfall`).
+- **Rezultat**: Shranjene in posredovane zaledne vizualizacije vplivov, ki jih preko front-end aplikacije za končne uporabnike enostavno prevajajo do netehničnih uslužbencev v banki.
+
+
+### Faza 6: Primerjava in ovrednotenje z literaturo (Notebook `06_literature_comparison.ipynb`)
+- **Cilj**: Kritično in znanstveno primerjati uspešnost naše implementacije z obstoječimi akademskimi izsledki in referencami iz domene strojnega učenja na področju tveganj.
+- **Aktivnosti**:
+  1. Identifikacija in popis 3 do 5 ključnih strokovnih študij (Google Scholar / IEEE), ki so temeljile na podobnih posojilnih podatkih.
+  2. Kvantitativna in kvalitativna primerjalna tabela metrik našega modela (ROC-AUC, izračunane F1-mere) proti tistim v literaturi.
+  3. Analiza vpliva specifik našega projekta (NLP značilke iz tekstovnih opisov, segmentacija strank) ter ovrednotenje njune doprinesene vrednosti.
+- **Rezultat**: Sklepne ugotovitve, omejitve preučevanja in teoretično utemeljen zaključek celotne projektne naloge.
 
 ## Pričakovani rezultati in prikaz
 
