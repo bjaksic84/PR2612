@@ -16,7 +16,7 @@ Podatke smo grafično in globinsko raziskali ter odkrili pomembne korelacije:
 1. **Obrestne mere in DTI:** Posojilojemalci z višjimi obrestnimi merami in višjim razmerjem dolga proti dohodku (DTI) imajo statistično znatno večjo verjetnost za neplačilo.
 2. **Asociacijska pravila:** S pomočjo algoritma *Apriori* smo kategorične atribute preverili v obliki trditev (z nastavitvijo *min_support=0.05* in *lift > 1*). Odkrili smo, da prevladujoči profil **neplačnika** sestavljajo atributi: visoka obrestna mera, status najemnika (nima lastniške nepremičnine) in posojilo, vzeto za namen konsolidacije dolgov (Debt Consolidation).
 
-Da bi okrnili šum in izboljšali performanse, smo izvedli **izbiro značilk z naključnim gozdom**. Gozd je najbolj poudaril značilke: `sub_grade`, `int_rate`, `dti`, `avg_cur_bal` ter oceno (`fico_avg`). S tem smo oklestili matriko na **19 ključnih atributov** (ki se po kasnejši NLP obdelavi vektorjev in dodani gruči K-Means razširi na končnih **68 atributov** pred samo klasifikacijo).
+Da bi omejili šum in izboljšali delovanje, smo izvedli **izbiro značilk z naključnim gozdom**. Gozd je najbolj poudaril značilke: `sub_grade`, `int_rate`, `dti`, `avg_cur_bal` ter oceno (`fico_avg`). S tem smo omejili matriko na **19 ključnih atributov** (ki se po kasnejši NLP obdelavi vektorjev in dodani gruči K-Means razširi na končnih **68 atributov** pred samo klasifikacijo).
 
 ![alt text](image-1.png)
 
@@ -26,20 +26,22 @@ Podatki niso le numerični. Kreditojemalci običajno vpišejo opis namena ali na
 ## 5. Modeliranje in najzanimivejši rezultati (Faza 4)
 Pred samim klasificiranjem smo z metodo **K-Means** (K=3, na podlagi *Elbow* in silhuetne metode) podatke segmentirali in uvedli dodatno gručeno značilko »`risk_cluster`«, s katero smo algoritmom dali predikcijski namig osnovnih profilov.
 
-Nato smo reševali problem binarne klasifikacije. Izziv 20-odstotne zastopanosti pozitivnega razreda smo napadli z asimetričnim uteževanjem razredov (`class_weight='balanced'` in `scale_pos_weight`). Primerjali smo 3 paradigme:
+Nato smo reševali problem binarne klasifikacije. Izziv 20-odstotne zastopanosti pozitivnega razreda smo rešili z asimetričnim uteževanjem razredov (`class_weight='balanced'` in `scale_pos_weight`). Primerjali smo 3 paradigme:
 - **Logistična regresija**
 - **Naključni gozd (Random Forest)**
 - **XGBoost Classifier**
 
 **Najbolj presenetljiv rezultat:** 
-Kljub temu, da *XGBoost* velja za vrhunski model obvladovanja tabularnih podatkov, je za naš optimiziran 20-tisoč-vrstični vzorec in izbrane komponente presenetljivo **Logistična regresija dosegla najboljše in najkoristnejše metrične vrednosti**:
+Kljub temu, da *XGBoost* velja za vrhunski model obvladovanja podatkov, je za naš optimiziran 20-tisoč-vrstični vzorec in izbrane komponente presenetljivo **Logistična regresija dosegla najboljše in najkoristnejše metrične vrednosti**:
 * Logistična regresija je dosegla AUC okoli **0.700**, medtem ko je bil AUC pri XGBoostu praktično identičen (**0.698**). 
 * Z vidika poslovne banke nas najbolj zanima **priklic (Recall)** tveganih strank (uspešno zajeti neplačniki). Logistična regresija je našla **cca. 64 %** vseh dejanskih neplačnikov, medtem ko jih je XGBoost **61 %**, Naključni gozd (Random Forest) pa zgreši več kot polovico in identificira **manj kot 50 %** neplačnikov.
 
 ![alt text](image-2.png)
 
-### Interpretacija ugotovitev
-Razlog za tak razpon tiči v naravi podatkovne mize – predprocesiranje, skrbno *Apriori* in *RF Feature Selection* sejanje in NLP prečiščevanje so stvorili dokaj **linearno ločljiv prostor značilk**. Kjer odločitveni gozdovi pogosto ustvarijo prepodrobne drevesne meje, se Logistična regresija s čisto linearno hiperravnino elegantno odzove na finančne indikatorje.
+### Zakaj je regresija zmagala? (Interpretacija)
+Glavni razlog je, da smo podatke predhodno zelo dobro očistili, prečesali besedila in izbrali le najpomembnejše informacije. Zaradi tega problem za model strojnega učenja ni bil preveč kompliciran. Napredni modeli (kot so odločitveni gozdovi) so v podatkih iskali preveč zapletene vzorce in se "zmedli", medtem ko je Logistična regresija potegnila povsem enostavno in jasno mejo med dobrimi in slabimi posojili.
 
 ## 6. Zaključek
-V prvem delu projekta smo uspešno vzpostavili stabilen podatkovni cevovod (pipeline), potrdili intuitivna pravila neplačil (visok *DTI*, najemniki) ter presenetili s spoznanjem, da visoko interpretabilni modeli (Logistična Regresija) parirajo hiperkompleksnim (XGBoost). V sklopu projekta smo izvozili **oba modela**, kar nam daje prožnost: robustno regresijo za hitro in tolmačeno uporabo API-ja na srednjem volumnu podatkov in globok XGBoost, če projekt skaliramo na milijone instanc in ne-linearnih povezav.
+V projektu smo uspešno obdelali podatke in potrdili logična pričakovanja: stranke, ki imajo veliko drugih dolgov (visok DTI) in ne živijo v svoji nepremičnini, pogosteje zamujajo s plačili. 
+
+Največje presenečenje raziskave pa je dejstvo, da povsem osnovna Logistična regresija deluje celo bolje kot napredni XGBoost. Ne glede na to smo za končno uporabo shranili **oba modela**. Tako imamo zdaj na voljo preprost in razumljiv model (Regresijo) za hitre vsakodnevne odločitve. Za primerljive napovedi v prihodnosti, če bomo zajeli vseh 2 milijona strank (kjer zna postati sistem mnogo bolj zapleten), pa nas v ozadju že čaka pripravljen in veliko zmogljivejši XGBoost.
