@@ -6,7 +6,7 @@ Cilj našega projekta je razviti zanesljiv napovedni model za ocenjevanje tvegan
 ## 2. Podatki in priprava
 Kot osnovo smo uporabili obsežno zbirko podatkov »Lending Club« (2007–2018). Zaradi računske zahtevnosti smo iz izhodiščnega nabora izvedli stratificirano vzorčenje natanko 20.000 vrstic, pri čemer smo ohranili izvirno razmerje v ciljni spremenljivki (stopnja neplačil v našem vzorcu je približno 20 %).
 
-* **Izbira in čiščenje:** Izmed več kot 140 atributov smo obdržali okrog 40 najrelevantnejših (npr. znesek posojila, obrestna mera, DTI – razmerje dolga proti dohodku, letni dohodek, namen posojila).
+* **Izbira in čiščenje:** Izmed 151 atributov smo obdržali natanko 45 najrelevantnejših (npr. znesek posojila, obrestna mera, DTI – razmerje dolga proti dohodku, letni dohodek, namen posojila).
 * **Manjkajoče vrednosti in skaliranje:** Na učni in testni množici smo sistematično imputirali manjkajoče vrednosti. Številske atribute smo standardizirali, kategorične pa kodirali s tehniko One-Hot Encoding, pri čemer smo pazili, da preprečimo prehajanje informacij (ang. *data leakage*) med učnim in testnim naborom.
 
 ![alt text](image.png)
@@ -16,7 +16,7 @@ Podatke smo grafično in globinsko raziskali ter odkrili pomembne korelacije:
 1. **Obrestne mere in DTI:** Posojilojemalci z višjimi obrestnimi merami in višjim razmerjem dolga proti dohodku (DTI) imajo statistično znatno večjo verjetnost za neplačilo.
 2. **Asociacijska pravila:** S pomočjo algoritma *Apriori* smo kategorične atribute preverili v obliki trditev (z nastavitvijo *min_support=0.05* in *lift > 1*). Odkrili smo, da prevladujoči profil **neplačnika** sestavljajo atributi: visoka obrestna mera, status najemnika (nima lastniške nepremičnine) in posojilo, vzeto za namen konsolidacije dolgov (Debt Consolidation).
 
-Da bi okrnili šum in izboljšali performanse, smo izvedli **izbiro značilk z naključnim gozdom**. Gozd je najbolj poudaril značilke: `sub_grade`, `int_rate`, `dti`, `avg_cur_bal` ter kredito oceno (`fico_avg`). S tem smo obdržali top 15 atributov, ki sami pojasnijo 95 % variance targeta.
+Da bi okrnili šum in izboljšali performanse, smo izvedli **izbiro značilk z naključnim gozdom**. Gozd je najbolj poudaril značilke: `sub_grade`, `int_rate`, `dti`, `avg_cur_bal` ter oceno (`fico_avg`). S tem smo oklestili matriko na **19 ključnih atributov** (ki se po kasnejši NLP obdelavi vektorjev in dodani gruči K-Means razširi na končnih **68 atributov** pred samo klasifikacijo).
 
 ![alt text](image-1.png)
 
@@ -34,7 +34,7 @@ Nato smo reševali problem binarne klasifikacije. Izziv 20-odstotne zastopanosti
 **Najbolj presenetljiv rezultat:** 
 Kljub temu, da *XGBoost* velja za vrhunski model obvladovanja tabularnih podatkov, je za naš optimiziran 20-tisoč-vrstični vzorec in izbrane komponente presenetljivo **Logistična regresija dosegla najboljše in najkoristnejše metrične vrednosti**:
 * Logistična regresija je dosegla AUC okoli **0.700**, medtem ko je bil AUC pri XGBoostu praktično identičen (**0.698**). 
-* Z vidika poslovne banke nas najbolj zanima **priklic (Recall)** tveganih strank. Logistična regresija je našla **cca. 63.8 %** vseh dejanskih neplačnikov, medtem ko jih je XGBoost okoli 60.6 %, Random Forest pa celo pod 50 %.
+* Z vidika poslovne banke nas najbolj zanima **priklic (Recall)** tveganih strank (uspešno zajeti neplačniki). Logistična regresija je našla **cca. 64 %** vseh dejanskih neplačnikov, medtem ko jih je XGBoost **61 %**, Naključni gozd (Random Forest) pa zgreši več kot polovico in identificira **manj kot 50 %** neplačnikov.
 
 ![alt text](image-2.png)
 
