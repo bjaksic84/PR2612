@@ -62,14 +62,10 @@ Tako bi lahko zaposleni v banki precej strokovno stranki razložil, zakaj je bil
 Za boljši prikaz delovanja obeh modelov v praksi nismo ostali zgolj pri izpisu številk v tabelah, temveč smo pripravili programsko rešitev. Kljub temu, da je Neodvisni model prikrajšan za uradne bančne podatke, se dobro znajde pri uporabi ostalih informacij s fokusom na DTI in NLP metriko.
 
 ### Bančna nadzorna aplikacija v živo (Streamlit)
-Za končno predstavitev rezultatov smo zgradili uporabniku prijazno aplikacijo (`app.py`), ki služi kot interaktivna nadzorna plošča hipotetičnemu referentu:
-1. **Primerjalni pogled:** Aplikacija neposredno eno ob drugi poganja Odvisni in Neodvisni XGBoost model na isti izbrani stranki, s čimer si referent lahko sam ustvari mnenje.
-2. **Razumljive vhodne vrednosti:** Da aplikacija ni preveč abstraktna, smo omogočili vnos vrednosti v standardnih merah (vnos v dolarjih ali običajni FICO skali). Zaledje model predikcij samo poskrbi za ponovno *z-score* standardizacijo, ki jo pričakuje model XGBoost.
-3. **Analiza "Kaj če":** Uporabnik lahko interaktivno spreminja vhodne podatke (npr. zviša DTI) in opazuje grafe ter model v živo.
-4. **Zgodovina simulacij:** Spremembe in poizvedbe se shranjujejo v tabelo na dnu zaslona.
-
-![Aplikativni vmesnik (Streamlit Dashboard)](figures/streamlit_dashboard.png)
-*Slika 3: Grafični vmesnik končne aplikacije "Lending Risk Evaluator" s sočasno primerjavo odvisnega in neodvisnega pristopa.*
+Za končno predstavitev rezultatov smo zgradili uporabniku prijazno aplikacijo (`app.py`), ki služi kot preprosta nadzorna plošča hipotetičnemu referentu:
+1. **Primerjalni pogled:** Aplikacija neposredno eno ob drugi poganja Odvisni in Neodvisni XGBoost model na isti izbrani stranki.
+2. **Analiza praga:** Uporabnik lahko interaktivno spreminja prag, pri katerem model odobri ali zavrne kredit (Privzeto na varnih 40%).
+3. **Analiza "Kaj če":** Uporabnik lahko s premikanjem drsnikov (v Z-vrednostih) spreminja vhodne podatke (npr. zviša DTI ali zmanjša FICO) in opazuje, kako strojem pada zaupanje v aplikanta.
 
 **Zaključek:**  
 Rezultati potrjujejo, da so interne bančne ocene logično zelo močan napovednik tveganja. Kljub temu smo ugotovili, da je ob vključitvi obdelave naravnega jezika (NLP), znižanju praga ter pozornosti na zadolžitve (DTI) mogoče ustvariti nevtralnejši mehanizem za zavračanje najbolj kritičnega roba prosilcev. Morda je v prihodnosti prav uporaba tovrstnih modelov brez umetnih bančnih ocen prava pot k bolj transparentnemu in neodvisnemu ocenjevanju.
