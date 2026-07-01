@@ -1,3 +1,18 @@
+"""
+Lending Risk Evaluator — interactive Streamlit dashboard.
+
+Runs two XGBoost models side by side on the same loan applicant:
+  * Dependent model    — uses all attributes, incl. bank scores (FICO, grade, int_rate).
+  * Independent model  — "blind test": bank scores removed, decides on raw client
+                         behaviour + NLP signals only.
+
+The dashboard lets a loan officer pick a client, tune the approve/reject
+threshold, run "what-if" scenarios in real units ($, %, FICO points), compare
+the two verdicts, and read a live SHAP waterfall explanation for each model.
+
+Run with:  streamlit run app.py
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -63,6 +78,19 @@ if 'risk_cluster' in dep_features and 'risk_cluster' not in test_X.columns:
 # 3. STRANSKA VRSTICA (Sidebar) za vnos uporabnika
 st.sidebar.header("Izbira in prilagoditev stranke")
 
+with st.sidebar.expander("ℹ️ O modelih in njihovi uspešnosti"):
+    st.markdown(
+        "Oba modela sta **XGBoost** klasifikatorja, naučena na 20.000 vzorčenih "
+        "posojilih Lending Club (delež neplačnikov ~20 %).\n\n"
+        "Izmerjeno na testni množici (4.000 strank):\n\n"
+        "| Model | ROC-AUC | Priklic @0.50 | Priklic @0.40 |\n"
+        "|---|:--:|:--:|:--:|\n"
+        "| Odvisni (s FICO) | 0.70 | 0.60 | 0.76 |\n"
+        "| Neodvisni (slepi) | 0.64 | 0.58 | 0.83 |\n\n"
+        "Znižanje praga na **0.40** občutno dvigne priklic (ujamemo več "
+        "neplačnikov), a na račun več lažnih preplahov (nižja natančnost)."
+    )
+
 # Izbira bazne stranke iz testne množice
 st.sidebar.markdown("Ker imamo 68 atributov, najprej naložimo naključen profil, ki ga lahko obkrojimo:")
 sample_idx = st.sidebar.number_input("Izberi ID stranke (0 - 3999):", min_value=0, max_value=len(test_X)-1, value=42)
@@ -99,12 +127,18 @@ fico_val = base_fico
 if 'fico_avg' in base_client:
     fico_val = st.sidebar.slider("FICO Ocena (Uporabi SAMO odvisni model!)", 300.0, 850.0, max(300.0, min(850.0, float(base_fico))), step=5.0)
 
+# Obrestna mera: bančna boniteta, ki jo uporablja SAMO odvisni model (neodvisni je "slep")
+# hkrati pa vpliva na oba modela posredno prek preračunanega mesečnega obroka.
+nova_obrestna = st.sidebar.slider("Obrestna mera (%) - bančna boniteta", 5.0, 31.0, max(5.0, min(31.0, float(base_int))), step=0.5)
+
 zgodovina_kredita = st.sidebar.slider("Kreditna zgodovina (leta)", 0.0, 40.0, max(0.0, min(40.0, float(base_hist))), step=1.0)
 stanje_kredita = st.sidebar.number_input("Stanje na obrokih - Revolving ($)", 0.0, value=max(0.0, float(base_revol)), step=1000.0)
 sentiment = st.sidebar.slider("Sentiment NLP opisa (-1 negativno, 1 pozitivno)", -1.0, 1.0, float(base_client.get('desc_sentiment_score', 0.0)), step=0.1)
+je_konsolidacija = st.sidebar.checkbox("Namen posojila: konsolidacija dolga", value=bool(float(base_client.get('purpose_debt_consolidation', 0.0)) > 0.5),
+                                       help="Apriori analiza je pokazala, da je to eden od tipičnih atributov neplačnika.")
 
-# Dinamični izračun novega mesečnega obroka (installment) ob spremembi posojila/dobe
-r = base_int / 1200.0
+# Dinamični izračun novega mesečnega obroka (installment) ob spremembi posojila/dobe/obresti
+r = nova_obrestna / 1200.0
 if r > 0:
     nova_obveznost = novo_posojilo * (r * (1 + r)**noba_doba) / ((1 + r)**noba_doba - 1)
 else:
@@ -123,6 +157,10 @@ client_custom['emp_length'] = scale(delovna_doba, 'emp_length')
 client_custom['credit_history_years'] = scale(zgodovina_kredita, 'credit_history_years')
 client_custom['revol_bal'] = scale(stanje_kredita, 'revol_bal')
 client_custom['desc_sentiment_score'] = sentiment
+client_custom['purpose_debt_consolidation'] = 1.0 if je_konsolidacija else 0.0
+
+if 'int_rate' in client_custom:
+    client_custom['int_rate'] = scale(nova_obrestna, 'int_rate')
 
 if 'fico_avg' in client_custom:
     client_custom['fico_avg'] = scale(fico_val, 'fico_avg')
@@ -187,6 +225,28 @@ with col2:
     st.pyplot(fig2)
     plt.clf()
 
+# 4b. PRIMERJAVA ODLOČITEV (ali se modela strinjata?)
+st.markdown("---")
+st.subheader("🔍 Primerjava odločitev obeh sistemov")
+
+sklep_dep = "ZAVRNJENO" if prob_dep >= THRESHOLD else "ODOBRENO"
+sklep_indep = "ZAVRNJENO" if prob_indep >= THRESHOLD else "ODOBRENO"
+
+m1, m2, m3 = st.columns(3)
+m1.metric("Odvisni model", sklep_dep, f"{prob_dep*100:.1f}% tveganja")
+m2.metric("Neodvisni model", sklep_indep, f"{prob_indep*100:.1f}% tveganja")
+m3.metric("Razlika v oceni tveganja", f"{abs(prob_dep - prob_indep)*100:.1f} o.t.",
+          "bančne bonitete spremenijo sliko" if abs(prob_dep - prob_indep) > 0.1 else "podobna ocena")
+
+if sklep_dep == sklep_indep:
+    st.success(f"✅ **Modela se strinjata:** oba bi stranko **{sklep_dep.lower()}**. "
+               "Odločitev je robustna tudi brez zanašanja na interne bančne ocene.")
+else:
+    st.warning(f"⚠️ **Modela se NE strinjata:** odvisni model bi stranko *{sklep_dep.lower()}*, "
+               f"neodvisni pa *{sklep_indep.lower()}*. To so mejni primeri, kjer bančne bonitete "
+               "(FICO, obresti, razred) odločilno premaknejo napoved — ravno tu je vredno "
+               "razmisliti, ali je interna ocena poštena ali pristranska.")
+
 # 5. Zgodovina ("What-If" Analysis)
 st.markdown("---")
 st.subheader("📚 Tabela simulacij (What-If analiza)")
@@ -198,6 +258,7 @@ if st.button("💾 Shrani trenutno oceno v tabelo"):
         "Dohodek ($)": round(nov_dohodek, 0),
         "DTI (%)": round(novo_dti, 1),
         "FICO": int(fico_val),
+        "Obr. mera (%)": round(nova_obrestna, 1),
         "Tveganje - Odvisni": f"{prob_dep*100:.1f}%",
         "Tveganje - Neodvisni": f"{prob_indep*100:.1f}%"
     })

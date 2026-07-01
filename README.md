@@ -18,6 +18,27 @@ scenarios in real time.
 > presentation outline (`powerpoint_outline.md`) are written in Slovenian. This
 > README is an English summary of the complete project and of how the app works.
 
+![Streamlit dashboard: dependent vs. independent model side by side](figures/streamlit_dashboard.png)
+
+### What this project demonstrates
+
+End-to-end data-science skills on a single, coherent problem:
+
+- **Data engineering** — sampling & cleaning a ~1.2 GB raw dataset down to a
+  reproducible modelling table; leakage control; train/test discipline.
+- **EDA & pattern mining** — correlation analysis, Apriori association rules.
+- **Feature engineering** — domain features (FICO average, credit-history length,
+  loan-to-income), ordinal & one-hot encoding, `StandardScaler` persisted for
+  production.
+- **NLP** — TF-IDF on job titles + transformer sentiment on free-text descriptions.
+- **Unsupervised + supervised ML** — K-Means risk clusters; Logistic Regression,
+  Random Forest and XGBoost with class-imbalance handling and threshold tuning.
+- **Explainability** — SHAP global (beeswarm) and local (waterfall) explanations.
+- **Product / deployment** — an interactive Streamlit dashboard that serves both
+  models with live SHAP and what-if simulation.
+- **A research narrative** — a controlled *dependent vs. independent* comparison
+  that asks a genuine fairness question about bank credit scores.
+
 ---
 
 ## 1. The problem and the core idea
@@ -132,6 +153,8 @@ Actual 0 (paid)      1057          2144
 Actual 1 (default)    134           665      → recall = 665 / 799 ≈ 0.83
 ```
 
+![Independent model confusion matrix at threshold 0.40](figures/confusion_matrix.png)
+
 For context, the wider study (`04_modeling.ipynb`, and the interim report)
 compared Logistic Regression, Random Forest and XGBoost. On this cleaned 20k
 sample the simple **Logistic Regression** was surprisingly competitive
@@ -151,6 +174,8 @@ explain individual decisions: **red** bars pushed the prediction toward *default
 **blue** bars toward *safe*. This lets a bank employee explain *why* a specific
 loan was flagged.
 
+![SHAP waterfall explanation of a single decision](figures/shap_waterfall.png)
+
 ---
 
 ## 5. The Streamlit app (`app.py`)
@@ -167,17 +192,29 @@ Features:
    threshold (default **0.40**).
 3. **"What-if" analysis with real units** — sliders in actual `$` / `%` / FICO
    points (not raw z-scores). Values are converted through `models/scaler.pkl`,
-   so you can raise DTI, lower FICO or change income and watch each model's
-   confidence move. A live **monthly installment** is recomputed from loan
-   amount, term and interest rate.
-4. **NLP profile** — the TF-IDF words describing the selected client are shown.
-5. **Live SHAP waterfall** — per-decision explanation rendered for *both* models.
-6. **What-if history table** — save successive scenarios into a comparison table.
+   so you can raise DTI, lower FICO, change income or **interest rate** and watch
+   each model's confidence move. A live **monthly installment** is recomputed
+   from loan amount, term and interest rate.
+4. **"Bank-score" vs "blind" demonstration** — the **interest-rate** slider moves
+   the *dependent* model (and both models indirectly via the installment) but
+   leaves the *independent* model unchanged, making the core thesis tangible.
+5. **Debt-consolidation toggle** — flips the `purpose_debt_consolidation` feature
+   that the Apriori analysis flagged as a typical defaulter trait; affects both
+   models.
+6. **Decision-comparison panel** — a summary that shows both verdicts, the gap in
+   risk, and whether the two systems **agree or disagree** (disagreement =
+   borderline cases where bank scores decide the outcome).
+7. **NLP profile** — the TF-IDF words describing the selected client are shown.
+8. **Live SHAP waterfall** — per-decision explanation rendered for *both* models.
+9. **Model-performance expander** — a sidebar panel with the measured AUC / recall
+   so users can judge the models' reliability.
+10. **What-if history table** — save successive scenarios into a comparison table.
 
 > **Note:** the prediction is driven by the columns the models were actually
-> trained on (DTI, income, FICO, credit history, revolving balance, installment,
-> sentiment, TF-IDF words). A few sliders (e.g. raw loan amount / term) are shown
-> for context and feed the installment calculation.
+> trained on (DTI, income, FICO, interest rate, credit history, revolving
+> balance, installment, sentiment, debt-consolidation purpose, TF-IDF words).
+> A few sliders (e.g. raw loan amount / term / employment length) are shown for
+> realism and feed the installment calculation.
 
 The app was the project's final showcase. During the school grading period it was
 temporarily reduced to a minimal fallback version; this repository restores it to
@@ -237,7 +274,39 @@ the ~1.2 GB raw Lending Club CSV placed in `data/raw/`).
 
 ---
 
-## 8. Authors
+## 8. Limitations & honest scope
+
+This is an academic project, and we state its limits plainly:
+
+- **Modest discrimination.** AUC ≈ 0.64–0.70 is well below production credit
+  scorecards (which typically reach 0.80+). Consumer default is genuinely hard to
+  predict, and we deliberately used a 20k subsample for tractability.
+- **Selection bias.** Lending Club data only contains loans that were *already
+  approved and funded*; the model never sees applicants who were rejected up
+  front, so it cannot be read as a full underwriting model.
+- **Not deployment-grade.** A real lender would need far more data, bureau
+  features, rigorous **fair-lending / disparate-impact** testing, adverse-action
+  reasoning, and formal model-risk governance (e.g. SR 11-7). Using loan
+  *purpose* and text sentiment in a credit decision is exactly the kind of signal
+  that must be checked for regulatory bias before any real use.
+- **Metrics vs. package versions.** Numbers above were re-verified against the
+  currently pinned libraries; exact values can shift slightly across versions.
+
+**Future work:** calibrate probabilities (Platt/isotonic), add cross-validated
+hyperparameter search, evaluate fairness across demographic proxies, containerise
+the app (Docker) and add a small CI + model-monitoring step.
+
+---
+
+## 9. License
+
+Released under the **MIT License** (see `LICENSE`). The Lending Club dataset is
+owned by its respective providers and is subject to its own terms; it is not
+redistributed in full here.
+
+---
+
+## 10. Authors
 
 - **Bojan Jakšić**
 - **Tilen Butara**
